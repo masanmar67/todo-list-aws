@@ -71,7 +71,7 @@ pipeline {
                         sh '''
                             git remote set-url origin https://${GITHUB_TOKEN}@github.com/masanmar67/todo-list-aws.git
                             git checkout master
-                            git checkout master --jenkinsfile
+                            git checkout master -- jenkinsfile
                             git merge develop
                             git checkout --ours jenkinsfile
                             git add jenkinsfile
