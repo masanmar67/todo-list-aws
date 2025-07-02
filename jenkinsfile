@@ -1,0 +1,84 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('Get Code') {
+            steps {
+                // Obtener el código del repositorio en github
+                echo 'Obteniendo el código de repositorio'
+                checkout([$class: 'GitSCM',
+                    branches: [[name: '*/develop']],
+                    userRemoteConfigs: [[url: 'https://github.com/masanmar67/todo-list-aws.git']]
+                ])
+                sh 'ls'
+                echo WORKSPACE
+            }
+        }
+
+        stage('Static'){
+            steps {
+                sh '''
+                    export PATH="/home/ubuntu/.local/bin:${PATH}"
+                    flake8 --format=pylint --exit-zero src > flake8.out
+                '''
+            }
+        }
+        stage('Security'){
+            steps {
+                sh '''
+                    export PATH="/home/ubuntu/.local/bin:${PATH}"
+                    bandit --exit-zero -r . --format=custom -o bandit.out --msg-template "{abspath}:{line}: [{test_id}] {msg}"
+                '''
+            }
+        }
+        stage('Build') {
+            steps {
+                sh '''
+                sam build
+                '''
+            }
+        }
+        stage('Deploy to AWS') {
+            steps {
+                sh '''
+                sam deploy --config-env staging --capabilities CAPABILITY_IAM
+                '''
+            }
+        }
+        stage('Get API URL') {
+            steps {
+                script {
+                    def apiUrl = sh(script: "sam list stack-outputs --stack-name todo-list-aws-staging --region us-east-1 --output json | jq -r '.[] | select(.OutputKey == \"BaseUrlApi\") | .OutputValue'", returnStdout: true).trim()
+                    echo "BASE URL: ${apiUrl}"
+                    // Puedes exportarla como variable de entorno si quieres usarla en otro stage
+                    env.BASE_URL = apiUrl
+                }
+            }
+        }
+        stage('RestService'){
+            steps {
+                script {
+                    sh '''
+                        pytest --junitxml=result-rest.xml ./test/integration
+                    '''
+                }
+            }
+        }
+        stage('Promote'){
+            steps {
+                withCredentials([string(credentialsId: 'token', variable: 'GITHUB_TOKEN')]) {
+                    script {
+                        sh '''
+                            git remote set-url origin https://${GITHUB_TOKEN}@github.com/masanmar67/todo-list-aws.git
+                            git checkout master
+                            git merge --no-commit develop
+                            git checkout -- jenkinsfile
+                            git commit -m "Cambios tomados de rama develop"
+                            git push origin master
+                        '''
+                    }
+                }
+            }
+        }
+    }
+}
