@@ -41,7 +41,7 @@ pipeline {
         stage('Deploy to AWS') {
             steps {
                 sh '''
-                sam deploy --config-env staging --capabilities CAPABILITY_IAM
+                sam deploy --config-env staging --stack-name todo-list-aws-staging --capabilities CAPABILITY_IAM
                 '''
             }
         }
