@@ -6,10 +6,7 @@ pipeline {
             steps {
                 // Obtener el código del repositorio en github
                 echo 'Obteniendo el código de repositorio'
-                checkout([$class: 'GitSCM',
-                    branches: [[name: '*/master']],
-                    userRemoteConfigs: [[url: 'https://github.com/masanmar67/todo-list-aws.git']]
-                ])
+                git branch: 'master', url: 'https://github.com/masanmar67/todo-list-aws.git'
                 sh 'ls'
                 echo WORKSPACE
             }
@@ -21,6 +18,7 @@ pipeline {
                     export PATH="/home/ubuntu/.local/bin:${PATH}"
                     flake8 --format=pylint --exit-zero src > flake8.out
                 '''
+                recordIssues tools: [flake8(name: 'Flake8', pattern: 'flake8.out')]
             }
         }
         stage('Security'){
@@ -29,6 +27,7 @@ pipeline {
                     export PATH="/home/ubuntu/.local/bin:${PATH}"
                     bandit --exit-zero -r . --format=custom -o bandit.out --msg-template "{abspath}:{line}: [{test_id}] {msg}"
                 '''
+                recordIssues tools: [pyLint(name: 'Bandit', pattern: 'bandit.out')]
             }
         }
         stage('Build') {
