@@ -6,10 +6,7 @@ pipeline {
             steps {
                 // Obtener el código del repositorio en github
                 echo 'Obteniendo el código de repositorio'
-                checkout([$class: 'GitSCM',
-                    branches: [[name: '*/develop']],
-                    userRemoteConfigs: [[url: 'https://github.com/masanmar67/todo-list-aws.git']]
-                ])
+                git branch: 'develop', url: 'https://github.com/masanmar67/todo-list-aws.git'
                 sh 'ls'
                 echo WORKSPACE
             }
@@ -21,6 +18,7 @@ pipeline {
                     export PATH="/home/ubuntu/.local/bin:${PATH}"
                     flake8 --format=pylint --exit-zero src > flake8.out
                 '''
+                recordIssues tools: [flake8(name: 'Flake8', pattern: 'flake8.out')]
             }
         }
         stage('Security'){
@@ -29,8 +27,10 @@ pipeline {
                     export PATH="/home/ubuntu/.local/bin:${PATH}"
                     bandit --exit-zero -r . --format=custom -o bandit.out --msg-template "{abspath}:{line}: [{test_id}] {msg}"
                 '''
+                recordIssues tools: [pyLint(name: 'Bandit', pattern: 'bandit.out')]
             }
         }
+
         stage('Build') {
             steps {
                 sh '''
@@ -69,16 +69,40 @@ pipeline {
                 withCredentials([string(credentialsId: 'token', variable: 'GITHUB_TOKEN')]) {
                     script {
                         sh '''
+                            set -e
+        
                             git remote set-url origin https://${GITHUB_TOKEN}@github.com/masanmar67/todo-list-aws.git
+                            git clean -f
                             git checkout master
-                            git checkout master -- jenkinsfile
-                            git merge develop
-                            git checkout --ours jenkinsfile
-                            git add jenkinsfile
-                            git commit -m "Cambios tomados de rama develop"
-                            git push origin master
+                            git pull origin master
+        
+                            git merge origin/develop --no-commit --no-ff || true
+        
+                            # En caso de conflicto en jenkinsfile, descartamos los cambios de develop
+                            if [ -f config.json ]; then
+                                git checkout --ours jenkinsfile
+                                git add jenkinsfile
+                            fi
+        
+                            # Añadir el resto de archivos (sin incluir jenkinsfile)
+                            git add .
+        
+                            # Verificamos si hay cambios para commitear
+                            if ! git diff --cached --quiet; then
+                                git commit -m "Merge from develop, excluding jenkinsfile"
+                                git push origin master
+                            else
+                                echo "No changes to commit."
+                            fi
                         '''
                     }
+                }
+            }
+        }
+        stage("Clean workspace") {
+            steps {
+                script {
+                    deleteDir()
                 }
             }
         }
